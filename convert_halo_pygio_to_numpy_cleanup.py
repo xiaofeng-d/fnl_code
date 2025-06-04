@@ -527,6 +527,49 @@ def extract_mass_values(mass_bins):
             
     return mass_min, mass_max
 
+def plot_halo_mass_function(data, output_dir='./', sim_name='gauss'):
+    """Plot the halo mass function from halo properties."""
+    halo_mass = data["sod_halo_mass"]
+    
+    # Create mass bins in log space
+    mass_bins = np.logspace(np.log10(halo_mass.min()), np.log10(halo_mass.max()), 30)
+    
+    # Calculate the volume of the simulation box
+    boxsize = 2000.0  # Mpc/h
+    volume = boxsize**3  # (Mpc/h)^3
+    
+    # Calculate the halo mass function
+    hist, bin_edges = np.histogram(halo_mass, bins=mass_bins)
+    bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2
+    dlogM = np.log10(bin_edges[1:]) - np.log10(bin_edges[:-1])
+    
+    # Convert to dn/dlogM
+    hmf = hist / (volume * dlogM)
+    
+    # Plot
+    plt.figure(figsize=(10, 8))
+    plt.loglog(bin_centers, hmf, 'o-', label=f'{sim_name}')
+    
+    # Add vertical line at 1e11 M☉/h
+    plt.axvline(x=1e11, color='r', linestyle='--', label='1e11 M☉/h')
+    
+    plt.xlabel('Halo Mass [M☉/h]')
+    plt.ylabel('dn/dlogM [(Mpc/h)⁻³]')
+    plt.title(f'Halo Mass Function - {sim_name}')
+    plt.grid(True, which='both', alpha=0.3)
+    plt.legend()
+    
+    # Save plot
+    plt.savefig(f'{output_dir}/halo_mass_function_{sim_name}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Print some statistics
+    print(f"\nHalo Mass Function Statistics for {sim_name}:")
+    print(f"Total number of halos: {len(halo_mass)}")
+    print(f"Mass range: {halo_mass.min():.2e} - {halo_mass.max():.2e} M☉/h")
+    print(f"Number of halos > 1e11 M☉/h: {np.sum(halo_mass > 1e11)}")
+    print(f"Number of halos 1e11-3.16e11 M☉/h: {np.sum((halo_mass >= 1e11) & (halo_mass <= 3.16e11))}")
+
 ## actual driver code
 
 if __name__ == "__main__":
@@ -539,50 +582,62 @@ if __name__ == "__main__":
         'fnl10': '/scratch/cpac/emberson/SPHEREx/L2000/output_l2000n4096_fnl10_tpm_seed0/HALOS-b0168'
     }
     
-    # Output directory
-    output_base = '/home/ac.xdong/hacc-bispec/fnl-paper-plots/L2000/'  # 你可能需要调整这个输出路径
+    # Output directory for plots
+    plot_dir = './hmf_plots'
+    os.makedirs(plot_dir, exist_ok=True)
     
-    # Process one simulation at a time
+    # Plot halo mass functions for all simulations
+    plt.figure(figsize=(12, 8))
+    
     for sim_name, base_path in base_paths.items():
-        print(f"\nProcessing simulation: {sim_name}")
+        print(f"\nAnalyzing simulation: {sim_name}")
         
-        # Create output directory if it doesn't exist
-        output_dir = f"{output_base}/output_l2000n4096_{sim_name}_tpm_seed0/HALOS-b0168"
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Read halos for step 624 (z=0)
+        # Read halos for step 624 (z=0) without mass cuts
         halo_file = f"{base_path}/m000-624.haloproperties"
-        data = read_halofile(halo_file)
+        data = read_halofile(halo_file, massbin_min=0.0, massbin_max=1e16)  # Remove mass cuts
         
-        # Generate galaxies
-        save_path = f"{output_dir}/m000-624.galaxies.haloproperties"
-        gen_centerhalos(data, save_path, boxsize=2000)
-
-    ######### for now we don't have step 310 yet, only 624  ##########  
-        # Read halos for step 310 (z=1)
-        halo_file = f"{base_path}/m000-310.haloproperties"
-        data = read_halofile(halo_file)
+        # Plot mass function for this simulation
+        halo_mass = data["sod_halo_mass"]
         
-        # Generate galaxies
-        save_path = f"{output_dir}/m000-310.galaxies.haloproperties"
-        gen_centerhalos(data, save_path, boxsize=2000)
-
-    # Debug section
-    print("\n=== Debug Section ===")
-    # Test a single file
-    test_file = '/scratch/cpac/emberson/SPHEREx/L2000/output_l2000n4096_gauss_tpm_seed0/HALOS-b0168/m000-624.haloproperties'
-    print(f"\nTesting file: {test_file}")
+        # Create mass bins in log space
+        mass_bins = np.logspace(np.log10(halo_mass.min()), np.log10(halo_mass.max()), 30)
+        
+        # Calculate the volume of the simulation box
+        boxsize = 2000.0  # Mpc/h
+        volume = boxsize**3  # (Mpc/h)^3
+        
+        # Calculate the halo mass function
+        hist, bin_edges = np.histogram(halo_mass, bins=mass_bins)
+        bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2
+        dlogM = np.log10(bin_edges[1:]) - np.log10(bin_edges[:-1])
+        
+        # Convert to dn/dlogM
+        hmf = hist / (volume * dlogM)
+        
+        # Plot this simulation's HMF
+        plt.loglog(bin_centers, hmf, 'o-', label=f'{sim_name}', alpha=0.7)
+        
+        # Print statistics
+        print(f"\nHalo Mass Function Statistics for {sim_name}:")
+        print(f"Total number of halos: {len(halo_mass)}")
+        print(f"Mass range: {halo_mass.min():.2e} - {halo_mass.max():.2e} M☉/h")
+        print(f"Number of halos > 1e11 M☉/h: {np.sum(halo_mass > 1e11)}")
+        print(f"Number of halos 1e11-3.16e11 M☉/h: {np.sum((halo_mass >= 1e11) & (halo_mass <= 3.16e11))}")
     
-    # Read first file to check available keys
-    data_0 = pygio.read_genericio(f"{test_file}#0")
-    print("\nAvailable keys in halo file:")
-    for key in sorted(data_0.keys()):
-        print(f"- {key}")
-    print()
+    # Add vertical lines for mass bins of interest
+    plt.axvline(x=1e11, color='r', linestyle='--', label='1e11 M☉/h')
+    plt.axvline(x=3.16e11, color='r', linestyle=':', label='3.16e11 M☉/h')
     
-    # Read and process single file
-    data = read_halofile(test_file)
+    # Customize plot
+    plt.xlabel('Halo Mass [M☉/h]')
+    plt.ylabel('dn/dlogM [(Mpc/h)⁻³]')
+    plt.title('Halo Mass Functions Comparison')
+    plt.grid(True, which='both', alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     
-    # Generate galaxies with debug output
-    save_path = './debug_output.haloproperties'
-    gen_centerhalos(data, save_path, boxsize=2000)
+    # Save plot
+    plt.tight_layout()
+    plt.savefig(f'{plot_dir}/halo_mass_functions_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print("\nHalo mass function plots have been saved to", plot_dir)
